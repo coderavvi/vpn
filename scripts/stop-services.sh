@@ -10,6 +10,7 @@ cd "${PROJECT_ROOT}"
 echo "[*] Stopping Secure Enterprise VPN system services..."
 
 # 1. Stop Frontend
+systemctl --user stop vpn-frontend 2>/dev/null || true
 if [ -f "${PROJECT_ROOT}/.frontend.pid" ]; then
     PID=$(cat "${PROJECT_ROOT}/.frontend.pid")
     echo "    Stopping frontend process (PID: ${PID})..."
@@ -19,6 +20,7 @@ fi
 pkill -f "vite" 2>/dev/null || true
 
 # 2. Stop Backend
+systemctl --user stop vpn-backend 2>/dev/null || true
 if [ -f "${PROJECT_ROOT}/.backend.pid" ]; then
     PID=$(cat "${PROJECT_ROOT}/.backend.pid")
     echo "    Stopping backend process (PID: ${PID})..."
@@ -30,7 +32,7 @@ pkill -f "uvicorn app.main:app" 2>/dev/null || true
 # 3. Teardown Network Namespaces
 if [ -f "network/namespaces/teardown-namespaces.sh" ]; then
     echo "    Tearing down network namespaces..."
-    sudo ./network/namespaces/teardown-namespaces.sh 2>/dev/null || echo "[!] Notice: sudo required for network namespaces teardown"
+    sudo -n ./network/namespaces/teardown-namespaces.sh 2>/dev/null || echo "[!] Notice: sudo required for network namespaces teardown (run with sudo if needed)"
 fi
 
 echo "[✓] All services stopped."

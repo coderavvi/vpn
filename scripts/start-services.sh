@@ -22,32 +22,29 @@ if systemctl is-active --quiet postgresql; then
     echo "[✓] PostgreSQL service is active."
 else
     echo "[!] PostgreSQL service is not active. Attempting start..."
-    sudo systemctl start postgresql || true
+    sudo -n systemctl start postgresql 2>/dev/null || true
 fi
 
 # 2. Setup Network Namespaces and Mock Portals
 echo "[*] Setting up network namespaces and departmental portals..."
 if [ -f "network/namespaces/setup-namespaces.sh" ]; then
-    sudo ./network/namespaces/setup-namespaces.sh || echo "[!] Notice: sudo required for network namespaces setup"
+    sudo -n ./network/namespaces/setup-namespaces.sh 2>/dev/null || echo "[!] Notice: sudo required for network namespaces setup (can be run separately with sudo)"
 fi
 
 # 3. Start Backend Uvicorn Server
 echo "[*] Starting FastAPI Backend on http://0.0.0.0:8000..."
-cd "${PROJECT_ROOT}/backend"
-source venv/bin/activate
-nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload > "${PROJECT_ROOT}/backend.log" 2>&1 &
-BACKEND_PID=$!
-echo "${BACKEND_PID}" > "${PROJECT_ROOT}/.backend.pid"
-echo "[✓] Backend running in background (PID: ${BACKEND_PID}, Logs: backend.log)"
+systemctl --user stop vpn-backend 2>/dev/null || true
+systemd-run --user --unit=vpn-backend --property=WorkingDirectory="${PROJECT_ROOT}/backend" \
+    "${PROJECT_ROOT}/backend/venv/bin/uvicorn" app.main:app --host 0.0.0.0 --port 8000
+echo "[✓] Backend service running (unit: vpn-backend, port: 8000)"
 
 # 4. Start Frontend Vite Development Server
-echo "[*] Starting React / Vite Frontend..."
-cd "${PROJECT_ROOT}/frontend"
-if [ -d "node_modules" ]; then
-    nohup npm run dev -- --host 0.0.0.0 > "${PROJECT_ROOT}/frontend.log" 2>&1 &
-    FRONTEND_PID=$!
-    echo "${FRONTEND_PID}" > "${PROJECT_ROOT}/.frontend.pid"
-    echo "[✓] Frontend running in background (PID: ${FRONTEND_PID}, Logs: frontend.log)"
+echo "[*] Starting React / Vite Frontend on http://0.0.0.0:5173..."
+if [ -d "${PROJECT_ROOT}/frontend/node_modules" ]; then
+    systemctl --user stop vpn-frontend 2>/dev/null || true
+    systemd-run --user --unit=vpn-frontend --property=WorkingDirectory="${PROJECT_ROOT}/frontend" \
+        "${PROJECT_ROOT}/frontend/node_modules/.bin/vite" --host 0.0.0.0
+    echo "[✓] Frontend service running (unit: vpn-frontend, port: 5173)"
 else
     echo "[!] Frontend node_modules not yet installed. Run 'cd frontend && npm install' first."
 fi
