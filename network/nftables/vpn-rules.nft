@@ -1,0 +1,14 @@
+#!/usr/sbin/nft -f
+# ==============================================================================
+# WireGuard VPN Interface Firewall Rules
+# ==============================================================================
+
+# Ensure filter table exists
+add table inet filter
+
+# WireGuard interface routing rules
+add chain inet filter wg_forward { type filter hook forward priority filter - 1; }
+
+# Allow traffic originating from WireGuard interface wg0 to permitted segments
+add rule inet filter wg_forward iifname "wg0" ct state established,related accept
+add rule inet filter wg_forward oifname "wg0" ct state established,related accept

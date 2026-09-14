@@ -1,0 +1,99 @@
+#!/usr/sbin/nft -f
+# ==============================================================================
+# Enterprise VPN & Role-Based Micro-Segmentation Firewall Configuration
+# ==============================================================================
+
+flush ruleset
+
+table inet filter {
+    # Dynamic IP sets populated based on active user roles
+    set hr_users {
+        type ipv4_addr
+        flags dynamic
+    }
+
+    set finance_users {
+        type ipv4_addr
+        flags dynamic
+    }
+
+    set it_users {
+        type ipv4_addr
+        flags dynamic
+    }
+
+    set admin_users {
+        type ipv4_addr
+        flags dynamic
+    }
+
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        # Connection state tracking: allow established and related packets
+        ct state established,related accept
+
+        # Loopback traffic
+        iif "lo" accept
+
+        # ICMP ping
+        ip protocol icmp accept
+        ip6 nexthdr icmpv6 accept
+
+        # Management SSH
+        tcp dport 22 accept
+
+        # WireGuard VPN Gateway listening port
+        udp dport 51820 accept
+
+        # HTTP/HTTPS Web Services (FastAPI API and Vite Frontend)
+        tcp dport { 80, 443, 8000, 5173 } accept
+
+        # Log and drop unexpected traffic
+        counter log prefix "[NFT-INPUT-DROP] " drop
+    }
+
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+
+        # Stateful connection tracking
+        ct state established,related accept
+
+        # Allow ICMP within VPN and namespaces for network diagnostics
+        ip protocol icmp accept
+
+        # ----------------------------------------------------------------------
+        # MICRO-SEGMENTATION ACCESS RULES
+        # ----------------------------------------------------------------------
+
+        # Administrator Access (Unrestricted access to all departmental segments)
+        ip saddr @admin_users ip daddr 10.20.10.0/24 tcp dport 9001 accept
+        ip saddr @admin_users ip daddr 10.20.20.0/24 tcp dport 9002 accept
+        ip saddr @admin_users ip daddr 10.20.30.0/24 tcp dport 9003 accept
+
+        # HR Department Micro-Segment Access (hr-ns: 10.20.10.0/24:9001)
+        ip saddr @hr_users ip daddr 10.20.10.0/24 tcp dport 9001 accept
+
+        # Finance Department Micro-Segment Access (finance-ns: 10.20.20.0/24:9002)
+        ip saddr @finance_users ip daddr 10.20.20.0/24 tcp dport 9002 accept
+
+        # IT Department Micro-Segment Access (it-ns: 10.20.30.0/24:9003)
+        ip saddr @it_users ip daddr 10.20.30.0/24 tcp dport 9003 accept
+
+        # Zero-Trust East-West Isolation: Drop cross-namespace traffic
+        ip saddr 10.20.0.0/16 ip daddr 10.20.0.0/16 counter drop
+
+        # Violation Logging: Log all unauthorized forwarding attempts before dropping
+        counter log prefix "[NFT-FWD-DROP] " drop
+    }
+}
+
+table ip nat {
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+
+        # Masquerade namespace and VPN outbound traffic
+        ip saddr 10.20.0.0/16 masquerade
+        ip saddr 10.10.0.0/24 masquerade
+    }
+}

@@ -1,0 +1,21 @@
+#!/usr/sbin/nft -f
+# ==============================================================================
+# Role-Based Micro-Segmentation Specific Rules
+# Restricts VPN subnet (10.10.0.0/24) to Department Namespaces (10.20.0.0/16)
+# ==============================================================================
+
+# Dynamic rules to associate specific client IPs with department namespaces:
+# Example:
+#   add element inet filter hr_users { 10.10.0.2 }
+#   add element inet filter finance_users { 10.10.0.3 }
+#   add element inet filter it_users { 10.10.0.4 }
+#   add element inet filter admin_users { 10.10.0.5 }
+
+table inet filter {
+    chain segmentation_check {
+        # Drop any packet destined for department portals not matching role
+        ip daddr 10.20.10.2 tcp dport 9001 ip saddr != @hr_users ip saddr != @admin_users counter log prefix "[NFT-HR-DROP] " drop
+        ip daddr 10.20.20.2 tcp dport 9002 ip saddr != @finance_users ip saddr != @admin_users counter log prefix "[NFT-FIN-DROP] " drop
+        ip daddr 10.20.30.2 tcp dport 9003 ip saddr != @it_users ip saddr != @admin_users counter log prefix "[NFT-IT-DROP] " drop
+    }
+}
