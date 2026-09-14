@@ -57,6 +57,12 @@ dist/
 dist-ssr/
 *.local
 
+# Logs & Runtime PIDs
+*.log
+*.pid
+.backend.pid
+.frontend.pid
+
 # IDEs & OS
 .vscode/
 .idea/
@@ -64,3 +70,4 @@ dist-ssr/
 *.swo
 *~
 .DS_Store
+

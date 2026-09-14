@@ -1,12 +1,32 @@
 """
 Main FastAPI Application Entrypoint.
-Initializes middleware, routers, and health check endpoints.
+Initializes middleware, background monitoring lifespans, routers, and health checks.
 """
 
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.config import settings
-from app.routers import auth, users, roles, wireguard, portals
+from app.routers import auth, users, roles, wireguard, sessions, logs, portals
+from app.services.monitor_service import start_background_monitoring_loop
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan context manager.
+    Launches background monitoring tasks upon startup and gracefully cancels upon shutdown.
+    """
+    monitor_task = asyncio.create_task(start_background_monitoring_loop())
+    yield
+    monitor_task.cancel()
+    try:
+        await monitor_task
+    except asyncio.CancelledError:
+        pass
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -14,6 +34,7 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # CORS Middleware configuration
@@ -25,11 +46,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include Routers
+# Include All System Routers
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(roles.router)
 app.include_router(wireguard.router)
+app.include_router(sessions.router)
+app.include_router(logs.router)
 app.include_router(portals.router)
 
 
