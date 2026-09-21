@@ -12,6 +12,12 @@ from sqlalchemy import or_
 from app.models import User, Role, WireGuardClient
 from app.schemas.user import UserCreate, UserUpdate
 from app.services.auth_service import get_password_hash, log_audit_event
+from app.services.wireguard_service import (
+    remove_peer_from_server,
+    generate_keypair,
+    encrypt_key,
+    register_peer,
+)
 
 
 def _generate_placeholder_wireguard_keys(db: Session, user: User) -> WireGuardClient:
@@ -37,15 +43,13 @@ def _generate_placeholder_wireguard_keys(db: Session, user: User) -> WireGuardCl
             detail="VPN subnet IP pool exhausted (10.10.0.2 - 10.10.0.254)",
         )
 
-    # Placeholder keys (will be replaced by wg CLI in Phase 5)
-    import secrets
-    placeholder_pub = f"placeholder_pub_{secrets.token_hex(16)}"
-    placeholder_priv = f"placeholder_priv_{secrets.token_hex(16)}"
+    # Generate cryptographic WireGuard keypair and encrypt private key
+    priv, pub = generate_keypair()
 
     wg_client = WireGuardClient(
         user_id=user.id,
-        public_key=placeholder_pub,
-        private_key_encrypted=placeholder_priv,
+        public_key=pub,
+        private_key_encrypted=encrypt_key(priv),
         assigned_ip=assigned_ip,
         is_active=True,
     )
@@ -54,6 +58,9 @@ def _generate_placeholder_wireguard_keys(db: Session, user: User) -> WireGuardCl
 
     user.wireguard_client_id = wg_client.id
     db.flush()
+
+    # Attempt interface peer registration
+    register_peer(wg_client, db)
     return wg_client
 
 
@@ -180,6 +187,9 @@ def update_user(db: Session, user_id: UUID, user_in: UserUpdate, admin_user: Use
 
     if user_in.is_active is not None:
         user.is_active = user_in.is_active
+        if not user_in.is_active and user.wireguard_client and user.wireguard_client.public_key:
+            remove_peer_from_server(user.wireguard_client.public_key)
+            user.wireguard_client.is_active = False
 
     db.commit()
     db.refresh(user)
@@ -204,6 +214,9 @@ def delete_user(db: Session, user_id: UUID, admin_user: User) -> dict:
         raise HTTPException(status_code=400, detail="Cannot delete your own admin account")
 
     username = user.username
+    if user.wireguard_client and user.wireguard_client.public_key:
+        remove_peer_from_server(user.wireguard_client.public_key)
+
     db.delete(user)
     db.commit()
 
@@ -247,6 +260,10 @@ def deactivate_user(db: Session, user_id: UUID, admin_user: User) -> User:
 
     if user.id == admin_user.id:
         raise HTTPException(status_code=400, detail="Cannot deactivate your own admin account")
+
+    if user.wireguard_client and user.wireguard_client.public_key:
+        remove_peer_from_server(user.wireguard_client.public_key)
+        user.wireguard_client.is_active = False
 
     user.is_active = False
     db.commit()

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { getDepartmentRoute } from '../utils/navigation';
 import { Shield, Lock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import VpnStatusBanner from '../components/VpnStatusBanner';
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('admin@vpn.local');
-  const [password, setPassword] = useState('Admin@123!');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const { login, isLoading, error, clearError } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -17,17 +19,16 @@ export default function LoginPage() {
     clearError();
     const res = await login(username, password);
     if (res.success) {
-      navigate(from, { replace: true });
+      const defaultRoute = getDepartmentRoute(res.user);
+      const target = from && from !== '/' ? from : defaultRoute;
+      navigate(target, { replace: true });
     }
   };
 
-  const handleQuickLogin = (u, p) => {
-    setUsername(u);
-    setPassword(p);
-  };
-
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <VpnStatusBanner />
+      <div className="flex-1 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
@@ -65,7 +66,7 @@ export default function LoginPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="w-full pl-10 pr-4 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent text-sm"
-                  placeholder="admin@vpn.local"
+                  placeholder="user@vpn.local"
                 />
               </div>
             </div>
@@ -99,33 +100,12 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Demo Logins */}
-          <div className="mt-8 pt-6 border-t border-slate-700/60">
-            <p className="text-xs text-slate-400 text-center mb-3">Quick Demo Credentials:</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin@vpn.local', 'Admin@123!')}
-                className="p-2 bg-slate-900/60 hover:bg-slate-700/60 border border-slate-700 rounded-lg text-slate-300 text-left transition-colors"
-              >
-                <span className="font-semibold text-sky-400 block">Admin User</span>
-                <span className="text-slate-500 text-[10px]">admin@vpn.local</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('portal_hr_user', 'Password123!')}
-                className="p-2 bg-slate-900/60 hover:bg-slate-700/60 border border-slate-700 rounded-lg text-slate-300 text-left transition-colors"
-              >
-                <span className="font-semibold text-emerald-400 block">HR User</span>
-                <span className="text-slate-500 text-[10px]">portal_hr_user</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-xs text-slate-500 mt-6">
           Account lockout enforced after 5 consecutive failed attempts.
         </p>
+      </div>
       </div>
     </div>
   );

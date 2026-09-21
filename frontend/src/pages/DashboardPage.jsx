@@ -247,7 +247,7 @@ export default function DashboardPage() {
                   {p.allowed ? 'Full Access Granted' : 'Restricted by RBAC'}
                 </span>
                 <button
-                  onClick={() => navigate('/portals')}
+                  onClick={() => navigate(p.allowed ? `/departments/${p.id}` : '/portals')}
                   className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
                     p.allowed
                       ? 'bg-sky-600/20 text-sky-400 hover:bg-sky-600/30 border border-sky-500/30'

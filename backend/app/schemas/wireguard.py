@@ -32,6 +32,8 @@ class WireGuardConfigResponse(BaseModel):
     username: str
     filename: str
     content: str
+    public_key: Optional[str] = None
+    assigned_ip: Optional[str] = None
 
 
 class WireGuardPeerStatus(BaseModel):

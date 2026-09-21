@@ -6,6 +6,7 @@ Verifies administrative CRUD operations, role assignments, and RBAC guard enforc
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from .conftest import TEST_ADMIN_USER, TEST_ADMIN_PASSWORD, TEST_USER_PASSWORD
 
 client = TestClient(app)
 
@@ -14,7 +15,7 @@ def get_admin_token() -> str:
     """Helper to authenticate as admin and obtain Bearer token."""
     resp = client.post(
         "/api/auth/login",
-        json={"username": "admin@vpn.local", "password": "Admin@123!"},
+        json={"username": TEST_ADMIN_USER, "password": TEST_ADMIN_PASSWORD},
     )
     assert resp.status_code == 200
     return resp.json()["access_token"]
@@ -34,7 +35,7 @@ def test_create_user():
     user_payload = {
         "username": "hr_test_user",
         "email": "hr_test@vpn.local",
-        "password": "Password123!",
+        "password": TEST_USER_PASSWORD,
         "full_name": "HR Test User",
         "department": "HR",
         "role_id": hr_role["id"],
@@ -89,7 +90,7 @@ def test_non_admin_cannot_create_user():
     # Login as regular user
     user_login = client.post(
         "/api/auth/login",
-        json={"username": "hr_test_user", "password": "Password123!"},
+        json={"username": "hr_test_user", "password": TEST_USER_PASSWORD},
     )
     assert user_login.status_code == 200
     user_token = user_login.json()["access_token"]
@@ -105,7 +106,7 @@ def test_non_admin_cannot_create_user():
         json={
             "username": "unauthorized_user",
             "email": "unauth@vpn.local",
-            "password": "Password123!",
+            "password": TEST_USER_PASSWORD,
             "full_name": "Unauthorized",
             "department": "HR",
             "role_id": hr_role["id"],

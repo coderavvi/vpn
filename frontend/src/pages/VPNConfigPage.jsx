@@ -18,7 +18,15 @@ export default function VPNConfigPage() {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [copiedPubKey, setCopiedPubKey] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+
+  const handleCopyPubKey = () => {
+    if (!config?.public_key) return;
+    navigator.clipboard.writeText(config.public_key);
+    setCopiedPubKey(true);
+    setTimeout(() => setCopiedPubKey(false), 2000);
+  };
 
   const fetchConfig = async () => {
     if (!user?.id) return;
@@ -140,6 +148,45 @@ export default function VPNConfigPage() {
                 )}
               </button>
             </div>
+
+            {/* Mandatory Peer Public Key Display */}
+            {config?.public_key && (
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-sky-500/40 space-y-2.5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Your Client Public Key (Mandatory for Server Handshake)</span>
+                    </span>
+                    <div className="font-mono text-xs text-white font-bold break-all mt-1 select-all bg-slate-950/80 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                      {config.public_key}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCopyPubKey}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-sky-600/30 hover:bg-sky-600/50 border border-sky-500/40 text-xs font-semibold text-sky-200 transition-colors self-start sm:self-center shrink-0"
+                  >
+                    {copiedPubKey ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-sky-400" />
+                        <span>Copy Public Key</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+                <div className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                  <span>Assigned VPN Tunnel IP: <strong className="text-emerald-400 font-mono">{config.assigned_ip || '10.10.0.X'}/32</strong></span>
+                  <span className="text-amber-300 font-mono text-[10px]">
+                    Server command: <code className="bg-slate-950 px-1 py-0.5 rounded text-amber-200">sudo wg set wg0 peer {config.public_key} allowed-ips {config.assigned_ip || '10.10.0.X'}/32 &amp;&amp; sudo wg-quick save wg0</code>
+                  </span>
+                </div>
+              </div>
+            )}
 
             <div className="relative">
               <pre className="p-5 bg-slate-950 rounded-xl font-mono text-xs text-sky-300 overflow-x-auto border border-slate-800 leading-relaxed">

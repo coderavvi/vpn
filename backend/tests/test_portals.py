@@ -9,12 +9,13 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models import AccessViolation
 from app.database import SessionLocal
+from .conftest import TEST_ADMIN_USER, TEST_ADMIN_PASSWORD, TEST_USER_PASSWORD
 
 client = TestClient(app)
 
 
 def get_token(username: str, password: str) -> str:
-    """Helper to authenticate and obtain token."""
+    """Helper to authenticate and obtain Bearer token."""
     resp = client.post(
         "/api/auth/login",
         json={"username": username, "password": password},
@@ -25,8 +26,8 @@ def get_token(username: str, password: str) -> str:
 
 def test_admin_can_access_all_portals():
     """Verify administrator has access to HR, Finance, and IT portals."""
-    admin_token = get_token("admin@vpn.local", "Admin@123!")
-    headers = {"Authorization": f"Bearer {admin_token}"}
+    admin_token = get_token(TEST_ADMIN_USER, TEST_ADMIN_PASSWORD)
+    headers = {"Authorization": f"Bearer {admin_token}", "X-Forwarded-For": "10.10.0.1"}
 
     hr_resp = client.get("/api/portals/hr", headers=headers)
     assert hr_resp.status_code == 200
@@ -46,7 +47,7 @@ def test_hr_user_portal_access_and_violation_logging():
     Verify HR user can access HR portal, is blocked from Finance portal,
     and the unauthorized attempt logs an AccessViolation in the database.
     """
-    admin_token = get_token("admin@vpn.local", "Admin@123!")
+    admin_token = get_token(TEST_ADMIN_USER, TEST_ADMIN_PASSWORD)
     admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
     # Fetch HR role
@@ -57,7 +58,7 @@ def test_hr_user_portal_access_and_violation_logging():
     user_payload = {
         "username": "portal_hr_user",
         "email": "portal_hr@vpn.local",
-        "password": "Password123!",
+        "password": TEST_USER_PASSWORD,
         "full_name": "Portal HR User",
         "department": "HR",
         "role_id": hr_role["id"],
@@ -66,8 +67,8 @@ def test_hr_user_portal_access_and_violation_logging():
     if create_resp.status_code == 400:
         pass  # already exists
 
-    hr_token = get_token("portal_hr_user", "Password123!")
-    hr_headers = {"Authorization": f"Bearer {hr_token}"}
+    hr_token = get_token("portal_hr_user", TEST_USER_PASSWORD)
+    hr_headers = {"Authorization": f"Bearer {hr_token}", "X-Forwarded-For": "10.10.0.1"}
 
     # 1. Access HR Portal -> Should SUCCEED (200)
     hr_access = client.get("/api/portals/hr", headers=hr_headers)

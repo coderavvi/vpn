@@ -6,6 +6,7 @@ Verifies sessions querying, disconnect actions, audit trails, and summary metric
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from .conftest import TEST_ADMIN_USER, TEST_ADMIN_PASSWORD
 
 client = TestClient(app)
 
@@ -14,7 +15,7 @@ def get_admin_token() -> str:
     """Helper to authenticate as admin and obtain Bearer token."""
     resp = client.post(
         "/api/auth/login",
-        json={"username": "admin@vpn.local", "password": "Admin@123!"},
+        json={"username": TEST_ADMIN_USER, "password": TEST_ADMIN_PASSWORD},
     )
     assert resp.status_code == 200
     return resp.json()["access_token"]

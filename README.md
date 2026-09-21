@@ -78,7 +78,7 @@ vpn-project/
 
 ### 1. Prerequisites
 - **OS:** Ubuntu 24.04 LTS
-- **PostgreSQL 16:** Database `vpndb` owned by user `vpnuser` with password `vpnpassword123`
+- **PostgreSQL 16:** Database `vpndb` owned by user `vpnuser` with password configured in `.env`
 - **WireGuard & nftables:** Installed via `sudo apt install wireguard-tools nftables`
 - **Python:** 3.12+
 - **Node.js:** 18+
@@ -115,14 +115,16 @@ cd /home/vboxuser/vpn-project
 
 ---
 
-## 🔑 Default Credentials
+## 🔑 Seeded Roles and Segment Access
 
-| Role | Username / Email | Password | Allowed Segment |
-|---|---|---|---|
-| **Administrator** | `admin@vpn.local` | `Admin@123!` | All micro-segments + Admin Portal |
-| **HR Specialist** | `hr_user@vpn.local` | `Password@123!` | `hr-ns` (`10.20.10.0/24:9001`) |
-| **Finance Analyst**| `fin_user@vpn.local`| `Password@123!` | `finance-ns` (`10.20.20.0/24:9002`) |
-| **IT Engineer** | `it_user@vpn.local` | `Password@123!` | `it-ns` (`10.20.30.0/24:9003`) |
+| Role | Default Account | Accessible Network Segment |
+|---|---|---|
+| **Administrator** | `admin@vpn.local` | All micro-segments + Admin Portal |
+| **HR Specialist** | `hr_user@vpn.local` | `hr-ns` (`10.20.10.0/24:9001`) |
+| **Finance Analyst**| `fin_user@vpn.local`| `finance-ns` (`10.20.20.0/24:9002`) |
+| **IT Engineer** | `it_user@vpn.local` | `it-ns` (`10.20.30.0/24:9003`) |
+
+> Set a secure password with at least 12 characters via `INITIAL_ADMIN_PASSWORD` and `INITIAL_USER_PASSWORD` in your environment prior to seeding.
 
 ---
 

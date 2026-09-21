@@ -19,7 +19,7 @@ class AccessViolation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     vpn_client_ip = Column(INET().with_variant(String(45), "sqlite"), nullable=True, index=True)
-    destination_ip = Column(INET().with_variant(String(45), "sqlite"), nullable=False)
+    destination_ip = Column(INET().with_variant(String(45), "sqlite"), nullable=True)
     destination_port = Column(Integer, nullable=False)
     protocol = Column(String(10), default="TCP")
     violation_type = Column(String(50), nullable=False)

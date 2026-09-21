@@ -6,6 +6,7 @@ Tests login success, login failure (wrong password), token refresh, and logout w
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from .conftest import TEST_ADMIN_USER, TEST_ADMIN_PASSWORD
 
 client = TestClient(app)
 
@@ -14,7 +15,7 @@ def test_login_success():
     """Test login with valid default admin credentials."""
     response = client.post(
         "/api/auth/login",
-        json={"username": "admin@vpn.local", "password": "Admin@123!"},
+        json={"username": TEST_ADMIN_USER, "password": TEST_ADMIN_PASSWORD},
     )
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
     data = response.json()
@@ -40,7 +41,7 @@ def test_token_refresh():
     """Test obtaining new tokens using a valid refresh token."""
     login_resp = client.post(
         "/api/auth/login",
-        json={"username": "admin@vpn.local", "password": "Admin@123!"},
+        json={"username": TEST_ADMIN_USER, "password": TEST_ADMIN_PASSWORD},
     )
     assert login_resp.status_code == 200
     refresh_token = login_resp.json()["refresh_token"]
@@ -60,7 +61,7 @@ def test_logout():
     """Test logout invalidating the refresh token."""
     login_resp = client.post(
         "/api/auth/login",
-        json={"username": "admin@vpn.local", "password": "Admin@123!"},
+        json={"username": TEST_ADMIN_USER, "password": TEST_ADMIN_PASSWORD},
     )
     assert login_resp.status_code == 200
     access_token = login_resp.json()["access_token"]

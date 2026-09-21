@@ -113,33 +113,85 @@ def assign_ip(db: Session) -> str:
 
 def get_server_public_key() -> str:
     """
-    Retrieve the server WireGuard public key from settings or generated key file.
+    Retrieve the server WireGuard public key.
+    Resolution priority:
+    1. settings.WIREGUARD_SERVER_PUBKEY or settings.WIREGUARD_SERVER_PUBLIC_KEY (from .env)
+    2. Live WireGuard kernel interface (`wg show <interface> public-key` / `sudo -n wg show`)
+    3. Stored key file in WIREGUARD_CONFIG_DIR (/etc/wireguard/server_public.key)
+    4. Local repository key files (network/wireguard/server_public.key)
+    5. Newly generated fallback keypair
     """
-    if settings.WIREGUARD_SERVER_PUBLIC_KEY:
-        return settings.WIREGUARD_SERVER_PUBLIC_KEY
+    # 1. Environment variable / .env settings
+    if settings.WIREGUARD_SERVER_PUBKEY and settings.WIREGUARD_SERVER_PUBKEY.strip():
+        return settings.WIREGUARD_SERVER_PUBKEY.strip()
 
+    if settings.WIREGUARD_SERVER_PUBLIC_KEY and settings.WIREGUARD_SERVER_PUBLIC_KEY.strip():
+        return settings.WIREGUARD_SERVER_PUBLIC_KEY.strip()
+
+    # 2. Live kernel WireGuard interface query
+    for cmd in (
+        ["wg", "show", settings.WIREGUARD_INTERFACE, "public-key"],
+        ["sudo", "-n", "wg", "show", settings.WIREGUARD_INTERFACE, "public-key"],
+    ):
+        try:
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0:
+                pub = res.stdout.strip()
+                if pub and len(pub) == 44:
+                    return pub
+        except Exception:
+            pass
+
+    # 3. /etc/wireguard/server_public.key or configured directory
     key_path = os.path.join(settings.WIREGUARD_CONFIG_DIR, "server_public.key")
     if os.path.exists(key_path) and os.access(key_path, os.R_OK):
         try:
             with open(key_path, "r", encoding="utf-8") as f:
-                return f.read().strip()
+                content = f.read().strip()
+                if content:
+                    return content
         except Exception:
             pass
 
-    # Check local network/wireguard directory
-    local_key = "/home/vboxuser/vpn-project/network/wireguard/server_public.key"
+    # 4. Check local network/wireguard directory
+    local_key = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "../../../network/wireguard/server_public.key")
+    )
     if os.path.exists(local_key):
         with open(local_key, "r", encoding="utf-8") as f:
-            return f.read().strip()
+            content = f.read().strip()
+            if content:
+                return content
 
-    # Generate and save a persistent local server keypair
-    os.makedirs("/home/vboxuser/vpn-project/network/wireguard", exist_ok=True)
+    legacy_key = "/home/vboxuser/vpn-project/network/wireguard/server_public.key"
+    if os.path.exists(legacy_key):
+        with open(legacy_key, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if content:
+                return content
+
+    # 5. Generate and save a persistent local server keypair
+    os.makedirs(os.path.dirname(local_key), exist_ok=True)
     priv, pub = generate_keypair()
-    with open("/home/vboxuser/vpn-project/network/wireguard/server_private.key", "w", encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(local_key), "server_private.key"), "w", encoding="utf-8") as f:
         f.write(priv)
     with open(local_key, "w", encoding="utf-8") as f:
         f.write(pub)
     return pub
+
+
+def get_server_endpoint() -> str:
+    """
+    Retrieve the WireGuard server endpoint from the WIREGUARD_SERVER_ENDPOINT
+    environment variable in settings.
+    Ensures port is included in the endpoint string.
+    """
+    endpoint = (settings.WIREGUARD_SERVER_ENDPOINT or "").strip()
+    if not endpoint:
+        endpoint = f"{settings.WIREGUARD_ENDPOINT_HOST}:{settings.WIREGUARD_SERVER_PORT}"
+    elif ":" not in endpoint:
+        endpoint = f"{endpoint}:{settings.WIREGUARD_SERVER_PORT}"
+    return endpoint
 
 
 def _calculate_allowed_ips_for_role(role_name: str, allowed_segments: List[str]) -> str:
@@ -190,8 +242,29 @@ def generate_config(user_id: UUID, db: Session) -> WireGuardConfigResponse:
         db.commit()
         private_key = priv
 
-    server_pubkey = get_server_public_key()
-    server_endpoint = f"{settings.WIREGUARD_ENDPOINT_HOST}:{settings.WIREGUARD_SERVER_PORT}"
+    # Retrieve server public key
+    server_public_key = get_server_public_key()
+    if not server_public_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Cannot generate VPN config: server public key could not be determined. Ensure WireGuard is running or configure WIREGUARD_SERVER_PUBKEY in .env."
+        )
+
+    # Read endpoint from VPN_ENDPOINT or settings
+    endpoint = settings.VPN_ENDPOINT or get_server_endpoint()
+
+    # Attempt peer registration on kernel interface if possible
+    try:
+        subprocess.run([
+            'sudo', '-n', 'wg', 'set', 'wg0',
+            'peer', client.public_key,
+            'allowed-ips', f'{client.assigned_ip}/32'
+        ], check=True, capture_output=True)
+
+        subprocess.run(['sudo', '-n', 'wg-quick', 'save', 'wg0'], check=True, capture_output=True)
+    except Exception as exc:
+        logger.warning("Live WireGuard peer registration deferred or requires sudo: %s", exc)
+
     allowed_segments = user.role.allowed_segments if user.role else []
     role_name = user.role.name if user.role else "user"
     allowed_ips_str = _calculate_allowed_ips_for_role(role_name, allowed_segments)
@@ -204,8 +277,8 @@ def generate_config(user_id: UUID, db: Session) -> WireGuardConfigResponse:
         "DNS = 1.1.1.1",
         "",
         "[Peer]",
-        f"PublicKey = {server_pubkey}",
-        f"Endpoint = {server_endpoint}",
+        f"PublicKey = {server_public_key}",
+        f"Endpoint = {endpoint}",
         f"AllowedIPs = {allowed_ips_str}",
         "PersistentKeepalive = 25",
         "",
@@ -222,6 +295,8 @@ def generate_config(user_id: UUID, db: Session) -> WireGuardConfigResponse:
         username=user.username,
         filename=filename,
         content=content,
+        public_key=client.public_key,
+        assigned_ip=client.assigned_ip,
     )
 
 
@@ -261,10 +336,7 @@ def provision_wireguard_client(user_id: UUID, db: Session) -> WireGuardClient:
 
 
 def register_peer(client: WireGuardClient, db: Session) -> bool:
-    """
-    Register a client peer with the Linux wg0 interface using wg CLI.
-    Command: wg set wg0 peer <pubkey> allowed-ips <ip>/32
-    """
+    """Register a client peer with the WireGuard interface."""
     cmd = [
         "wg",
         "set",
@@ -290,30 +362,30 @@ def register_peer(client: WireGuardClient, db: Session) -> bool:
             return False
 
 
+def remove_peer_from_server(client_public_key: str) -> None:
+    """Remove WireGuard peer from the live server and synchronize state."""
+    if not client_public_key:
+        return
+    try:
+        subprocess.run([
+            'sudo', '-n', 'wg', 'set', 'wg0',
+            'peer', client_public_key,
+            'remove'
+        ], check=True, capture_output=True)
+
+        subprocess.run(['sudo', '-n', 'wg-quick', 'save', 'wg0'], check=True, capture_output=True)
+        logger.info("Successfully removed peer %s from WireGuard server", client_public_key)
+    except Exception as exc:
+        logger.warning("Could not remove peer %s from wg0: %s", client_public_key, exc)
+
+
 def remove_peer(user_id: UUID, db: Session) -> bool:
-    """
-    Remove client peer from the WireGuard wg0 interface and mark inactive in database.
-    Command: wg set wg0 peer <pubkey> remove
-    """
+    """Remove client peer from the WireGuard interface and update records."""
     client = db.query(WireGuardClient).filter(WireGuardClient.user_id == user_id).first()
     if not client:
         return False
 
-    cmd = [
-        "wg",
-        "set",
-        settings.WIREGUARD_INTERFACE,
-        "peer",
-        client.public_key,
-        "remove",
-    ]
-    try:
-        subprocess.run(cmd, capture_output=True, text=True)
-    except Exception:
-        try:
-            subprocess.run(["sudo", "-n"] + cmd, capture_output=True, text=True)
-        except Exception:
-            pass
+    remove_peer_from_server(client.public_key)
 
     client.is_active = False
     db.commit()
@@ -406,3 +478,24 @@ def get_status(db: Session) -> WireGuardStatusResponse:
         active_peers_count=len([p for p in peer_statuses if p.is_connected]),
         peers=peer_statuses,
     )
+
+
+def get_server_info(db: Session) -> Dict:
+    """
+    Retrieve WireGuard server configuration info for admin verification:
+    - Server public key currently in use
+    - Endpoint address written into client configs
+    - Number of registered peers
+    """
+    server_pubkey = get_server_public_key()
+    server_endpoint = get_server_endpoint()
+    registered_peers = db.query(WireGuardClient).filter(WireGuardClient.is_active.is_(True)).count()
+
+    return {
+        "server_public_key": server_pubkey,
+        "public_key": server_pubkey,
+        "endpoint": server_endpoint,
+        "endpoint_address": server_endpoint,
+        "registered_peers": registered_peers,
+        "registered_peers_count": registered_peers,
+    }

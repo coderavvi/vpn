@@ -3,11 +3,13 @@ Authentication Router.
 Exposes endpoints for user login, token refresh, logout, and self-profile inspection.
 """
 
+import ipaddress
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
+from app.middleware.vpn_required import get_client_ip
 from app.schemas.auth import (
     LoginRequest,
     RefreshTokenRequest,
@@ -147,3 +149,24 @@ def get_me(
     Retrieve authenticated user's profile and assigned role permissions.
     """
     return _build_user_me_response(current_user)
+
+
+@router.get("/vpn-status")
+def get_vpn_status(request: Request):
+    """
+    Check if the incoming request originates from the WireGuard VPN subnet (10.10.0.0/24).
+    Public endpoint used by frontend to display connection status banner.
+    """
+    client_ip_str = get_client_ip(request)
+    vpn_network = ipaddress.ip_network("10.10.0.0/24")
+    try:
+        client_ip = ipaddress.ip_address(client_ip_str)
+        is_vpn = client_ip in vpn_network
+    except ValueError:
+        is_vpn = False
+
+    return {
+        "vpn_connected": is_vpn,
+        "client_ip": client_ip_str,
+        "message": "Connected via VPN" if is_vpn else "Not connected to VPN",
+    }

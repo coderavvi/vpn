@@ -13,6 +13,7 @@ from app.models import User, AccessViolation
 from app.services.rbac_service import check_user_permission
 from app.services.auth_service import sanitize_ip
 from app.middleware.auth_middleware import get_current_user
+from app.middleware.vpn_required import require_vpn_connection
 
 router = APIRouter(prefix="/api/portals", tags=["Department Portals"])
 
@@ -46,7 +47,7 @@ def _record_violation(
     db.commit()
 
 
-@router.get("/hr", response_model=Dict[str, Any])
+@router.get("/hr", response_model=Dict[str, Any], dependencies=[Depends(require_vpn_connection)])
 def get_hr_portal(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -96,7 +97,7 @@ def get_hr_portal(
     }
 
 
-@router.get("/finance", response_model=Dict[str, Any])
+@router.get("/finance", response_model=Dict[str, Any], dependencies=[Depends(require_vpn_connection)])
 def get_finance_portal(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -147,7 +148,7 @@ def get_finance_portal(
     }
 
 
-@router.get("/it", response_model=Dict[str, Any])
+@router.get("/it", response_model=Dict[str, Any], dependencies=[Depends(require_vpn_connection)])
 def get_it_portal(
     request: Request,
     current_user: User = Depends(get_current_user),

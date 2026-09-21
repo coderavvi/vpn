@@ -141,7 +141,11 @@ def authenticate_user(
 
     # Check account lock status
     if user.locked_until and user.locked_until > now:
-        remaining_minutes = int((user.locked_until - now).total_seconds() / 60) + 1
+        remaining_seconds = int((user.locked_until - now).total_seconds())
+        if remaining_seconds >= 60:
+            remaining_str = f"{int(remaining_seconds / 60) + 1} minutes"
+        else:
+            remaining_str = f"{max(1, remaining_seconds)} seconds"
         log_audit_event(
             db=db,
             event_type="AUTH_LOCKED",
@@ -153,7 +157,7 @@ def authenticate_user(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Account is locked due to multiple failed login attempts. Try again in {remaining_minutes} minutes.",
+            detail=f"Account is locked due to multiple failed login attempts. Try again in {remaining_str}.",
         )
 
     # Check if user account is deactivated
@@ -175,12 +179,15 @@ def authenticate_user(
     # Verify password
     if not verify_password(password, user.hashed_password):
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
-        if user.failed_login_attempts >= 5:
-            user.locked_until = now + timedelta(minutes=15)
+        max_attempts = getattr(settings, "MAX_FAILED_LOGIN_ATTEMPTS", 5)
+        lockout_mins = getattr(settings, "ACCOUNT_LOCKOUT_MINUTES", 1)
+        if user.failed_login_attempts >= max_attempts:
+            user.locked_until = now + timedelta(minutes=lockout_mins)
+            lock_duration_str = f"{lockout_mins} minute" if lockout_mins == 1 else f"{lockout_mins} minutes"
             log_audit_event(
                 db=db,
                 event_type="ACCOUNT_LOCKED",
-                description=f"Account locked for 15 minutes after 5 failed login attempts: {user.username}",
+                description=f"Account locked for {lock_duration_str} after {max_attempts} failed login attempts: {user.username}",
                 user_id=user.id,
                 ip_address=ip_address,
                 user_agent=user_agent,
@@ -190,7 +197,7 @@ def authenticate_user(
             log_audit_event(
                 db=db,
                 event_type="AUTH_FAILED",
-                description=f"Failed login attempt ({user.failed_login_attempts}/5) for user: {user.username}",
+                description=f"Failed login attempt ({user.failed_login_attempts}/{max_attempts}) for user: {user.username}",
                 user_id=user.id,
                 ip_address=ip_address,
                 user_agent=user_agent,

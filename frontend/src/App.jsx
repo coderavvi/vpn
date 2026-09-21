@@ -1,17 +1,22 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/authStore';
+import { getDepartmentRoute } from './utils/navigation';
 
-// Components
-import Navbar from './components/Navbar';
-import Sidebar from './components/Sidebar';
+// Layout & Route Protection
+import MainLayout from './components/MainLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 
-// Pages
+// Public & General Pages
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import PortalsPage from './pages/PortalsPage';
 import VPNConfigPage from './pages/VPNConfigPage';
+
+// Real Departmental Pages (Zero-Trust Micro-Segments)
+import HRDepartmentPage from './pages/departments/HRDepartmentPage';
+import FinanceDepartmentPage from './pages/departments/FinanceDepartmentPage';
+import ITDepartmentPage from './pages/departments/ITDepartmentPage';
 
 // Admin Pages
 import UsersPage from './pages/admin/UsersPage';
@@ -20,18 +25,25 @@ import WireGuardPage from './pages/admin/WireGuardPage';
 import SessionsPage from './pages/admin/SessionsPage';
 import LogsPage from './pages/admin/LogsPage';
 
-function MainLayout({ children }) {
-  return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col">
-      <Navbar />
-      <div className="flex flex-1">
-        <Sidebar />
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
-          {children}
-        </main>
-      </div>
-    </div>
-  );
+/**
+ * Root Route Controller:
+ * Directs administrators to the Overview Dashboard, and directs
+ * departmental users immediately to their designated micro-segment view.
+ */
+function RootRoute() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.is_admin || user?.role?.name?.toLowerCase() === 'admin';
+
+  if (isAdmin) {
+    return (
+      <MainLayout>
+        <DashboardPage />
+      </MainLayout>
+    );
+  }
+
+  const roleRoute = getDepartmentRoute(user);
+  return <Navigate to={roleRoute} replace />;
 }
 
 export default function App() {
@@ -44,25 +56,73 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes */}
+        {/* Public Authentication Route */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Protected User Routes */}
+        {/* Root Route: Role-Based Automated Dispatch */}
         <Route
           path="/"
           element={
             <ProtectedRoute>
+              <RootRoute />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Real Departmental Pages with Cryptographic Segment Enforcement */}
+        <Route
+          path="/departments/hr"
+          element={
+            <ProtectedRoute
+              requiredDepartment="hr"
+              targetDepartment="Human Resources"
+              requiredSegment="hr-ns"
+              targetIp="10.20.10.2:9001"
+            >
               <MainLayout>
-                <DashboardPage />
+                <HRDepartmentPage />
               </MainLayout>
             </ProtectedRoute>
           }
         />
 
         <Route
+          path="/departments/finance"
+          element={
+            <ProtectedRoute
+              requiredDepartment="finance"
+              targetDepartment="Finance & Accounts"
+              requiredSegment="finance-ns"
+              targetIp="10.20.20.2:9002"
+            >
+              <MainLayout>
+                <FinanceDepartmentPage />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/departments/it"
+          element={
+            <ProtectedRoute
+              requiredDepartment="it"
+              targetDepartment="IT Operations"
+              requiredSegment="it-ns"
+              targetIp="10.20.30.2:9003"
+            >
+              <MainLayout>
+                <ITDepartmentPage />
+              </MainLayout>
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Zero-Trust Micro-Segment Verification / Admin Testing Console */}
+        <Route
           path="/portals"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireAdmin={true}>
               <MainLayout>
                 <PortalsPage />
               </MainLayout>
@@ -70,6 +130,7 @@ export default function App() {
           }
         />
 
+        {/* User VPN Tunnel Configuration Download & Key Management */}
         <Route
           path="/vpn-config"
           element={
@@ -81,7 +142,7 @@ export default function App() {
           }
         />
 
-        {/* Protected Admin Routes */}
+        {/* Admin Management Routes (Access Denied for Non-Admins) */}
         <Route
           path="/admin/users"
           element={

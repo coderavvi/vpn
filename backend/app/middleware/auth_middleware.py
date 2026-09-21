@@ -3,7 +3,7 @@ Authentication Middleware & Security Dependencies.
 Provides FastAPI dependencies for Bearer token validation and RBAC guards.
 """
 
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -13,17 +13,23 @@ from app.database import get_db
 from app.models import User
 from app.services.auth_service import decode_access_token
 
-security = HTTPBearer(auto_error=True)
+security = HTTPBearer(auto_error=False)
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
     """
     Validate Bearer JWT access token and return current authenticated User.
     Raises HTTP 401 if invalid or expired.
     """
+    if not credentials or not credentials.credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     token = credentials.credentials
     payload = decode_access_token(token)
 
