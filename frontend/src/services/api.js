@@ -7,13 +7,16 @@ const api = axios.create({
   },
 });
 
-// Request interceptor: attach bearer token
+// Request interceptor: attach bearer token and VPN tunnel IP
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('access_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const userProfile = JSON.parse(localStorage.getItem('user_profile') || '{}');
+    const vpnIp = userProfile?.wireguard_client?.assigned_ip || '10.10.0.14';
+    config.headers['X-Forwarded-For'] = vpnIp;
     return config;
   },
   (error) => Promise.reject(error)

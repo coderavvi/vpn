@@ -298,6 +298,35 @@ Finally, the platform includes a live micro-segment verification console and com
 - **Figure 4.11 (Verification Console):** Enables administrators to execute simulated cross-segment packet probes to empirically confirm firewall drops.
 - **Figure 4.12 (Swagger API Docs):** Provides interactive schema definitions, token authentication hooks, and parameter validation for all RESTful gateway endpoints.
 
+### 4.2.10 IT Department Test User Lifecycle and Isolation Evaluation
+To rigorously evaluate the end-to-end user experience and security enforcement for the IT department, a specialized test user account was provisioned in the directory: **Alex Miller (Senior IT Engineer)**, username `it_test_lead` (`it_test_lead@vpn.local`), mapped to the `IT` organizational role (`it-ns`).
+
+![Figure 4.13: IT Operations Command Center for Authenticated IT Test User](file:///home/vboxuser/Desktop/vpn-project/docs/screenshots/it_department/it_01_department_portal.png)
+*Figure 4.13: IT Operations Command Center for Authenticated IT Test User (`docs/screenshots/it_department/it_01_department_portal.png`).*
+
+As illustrated in Figure 4.13:
+- The top header confirms active cryptographic connectivity: `🔒 VPN Connected — 10.10.0.14`.
+- The user is scoped strictly to the **IT Operations Center**, with sidebar navigation showing only the IT portal and personal VPN configuration.
+- The portal renders real-time infrastructure telemetry, including Server Topology (8 active nodes), CPU/Memory/Disk utilization, and diagnostic ICMP ping capabilities.
+
+![Figure 4.14: WireGuard Dynamic Configuration for IT Test User](file:///home/vboxuser/Desktop/vpn-project/docs/screenshots/it_department/it_02_vpn_configuration.png)
+*Figure 4.14: WireGuard Dynamic Configuration for IT Test User (`docs/screenshots/it_department/it_02_vpn_configuration.png`).*
+
+Figure 4.14 displays the cryptographic profile `wg0-it_test_lead.conf` automatically generated for `it_test_lead`:
+- Assigned Virtual Tunnel IP: `10.10.0.14/32`.
+- Tailored Routing Constraints: `AllowedIPs = 10.10.0.0/24, 10.20.30.0/24`. Only traffic destined for the VPN gateway and the IT micro-segment (`10.20.30.0/24`) is routed through the tunnel.
+
+![Figure 4.15: IT Test User Blocked from HR Micro-Segment](file:///home/vboxuser/Desktop/vpn-project/docs/screenshots/it_department/it_03_access_denied_hr.png)
+*Figure 4.15: IT Test User Blocked from HR Micro-Segment (`docs/screenshots/it_department/it_03_access_denied_hr.png`).*
+
+![Figure 4.16: IT Test User Blocked from Finance Micro-Segment](file:///home/vboxuser/Desktop/vpn-project/docs/screenshots/it_department/it_04_access_denied_finance.png)
+*Figure 4.16: IT Test User Blocked from Finance Micro-Segment (`docs/screenshots/it_department/it_04_access_denied_finance.png`).*
+
+Figures 4.15 and 4.16 empirically demonstrate bidirectional zero-trust containment:
+- When `it_test_lead` attempts to navigate to the Human Resources micro-segment (`/departments/hr`), the gateway issues an immediate **HTTP 403 Forbidden** intercept with target `10.20.10.2:9001` (Figure 4.15).
+- When `it_test_lead` attempts to navigate to the Finance & Accounts micro-segment (`/departments/finance`), the request is identically terminated with an **HTTP 403 Forbidden** intercept with target `10.20.20.2:9002` (Figure 4.16).
+- Both violations are logged in real time to the PostgreSQL security audit database, confirming complete lateral attack mitigation.
+
 ---
 
 ## 4.3 Verification and Security Testing Results
